@@ -10,6 +10,7 @@ const WALL_DEPTH: f32 = 20.0;
 const GOAL_DEPTH: f32 = 40.0;
 const PADDLE_SIZE: (f32, f32) = (20.0, 100.0);
 const PADDLE_SPEED: f32 = 300.0;
+const MAX_BOUNCE_ANGLE: f32 = 45.0;
 
 #[derive(Component)]
 struct Ball;
@@ -52,6 +53,43 @@ struct Goal;
 #[derive(Component)]
 struct Paddle;
 
+#[derive(Bundle)]
+struct PaddleBundle {
+    paddle: Paddle,
+    collision_shape: CollisionShape,
+    rigid_body: RigidBody,
+    rotation_constraints: RotationConstraints,
+    velocity: Velocity,
+    transform: Transform,
+    global_transform: GlobalTransform,
+}
+
+impl PaddleBundle {
+    fn new(translation: Vec3) -> Self {
+        let collision_shape = CollisionShape::Cuboid {
+            half_extends: Vec3::new(PADDLE_SIZE.0 / 2.0, PADDLE_SIZE.1 / 2.0, 0.0),
+            border_radius: None,
+        };
+        Self {
+            paddle: Paddle,
+            collision_shape,
+            // TODO: Figure out how to make the paddles not be pushed by the ball.
+            rigid_body: RigidBody::Dynamic,
+            rotation_constraints: RotationConstraints::lock(),
+            velocity: Velocity::default(),
+            transform: Transform::from_translation(translation),
+            global_transform: GlobalTransform::default(),
+        }
+    }
+}
+
+enum PlayerSide {
+    Left,
+    Right,
+}
+
+struct PlayerScoredEvent(PlayerSide);
+
 struct GameState {
     left_paddle: Entity,
     right_paddle: Entity,
@@ -71,12 +109,15 @@ fn main() {
         })
         .add_plugins(DefaultPlugins)
         .add_plugin(PhysicsPlugin::default())
+        .add_event::<PlayerScoredEvent>()
         .add_startup_system(spawn)
         .add_system(bevy::input::system::exit_on_esc_system)
         .add_system(camera_control)
         .add_system(paddle_control)
-        .add_system(ball_bounce)
-        .add_system(check_scored)
+        .add_system(ball_wall_bounce)
+        .add_system(ball_paddle_bounce)
+        .add_system(check_scored.label("score_check"))
+        .add_system(reset_round.after("score_check"))
         .run();
 }
 
@@ -84,7 +125,8 @@ fn spawn(mut commands: Commands) {
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
 
     // Bouncy ball
-    let ball_bundle = BallBundle::new(Vec3::ZERO, Vec3::new(-1.0, 2.0, 0.0).normalize() * BALL_SPEED);
+    // let ball_bundle = BallBundle::new(Vec3::ZERO, Vec3::new(-1.0, 2.0, 0.0).normalize() * BALL_SPEED);
+    let ball_bundle = BallBundle::new(Vec3::ZERO, Vec3::X * BALL_SPEED);
     commands.spawn_bundle(ball_bundle);
 
     // Top wall
@@ -142,38 +184,12 @@ fn spawn(mut commands: Commands) {
         .id();
 
     // Left paddle
-    let left_paddle = commands
-        .spawn_bundle((
-            Transform::from_translation(Vec3::new(-(WINDOW_SIZE.0 / 2.0) + 50.0, 0.0, 0.0)),
-            GlobalTransform::default(),
-        ))
-        .insert(Paddle)
-        .insert(CollisionShape::Cuboid {
-            half_extends: Vec3::new(PADDLE_SIZE.0 / 2.0, PADDLE_SIZE.1 / 2.0, 0.0),
-            border_radius: None,
-        })
-        // TODO: Figure out how to make the paddles not be pushed by the ball.
-        .insert(RigidBody::Dynamic)
-        .insert(RotationConstraints::lock())
-        .insert(Velocity::default())
-        .id();
+    let paddle_bundle = PaddleBundle::new(Vec3::new(-(WINDOW_SIZE.0 / 2.0) + 50.0, 0.0, 0.0));
+    let left_paddle = commands.spawn_bundle(paddle_bundle).id();
 
     // Right paddle
-    let right_paddle = commands
-        .spawn_bundle((
-            Transform::from_translation(Vec3::new((WINDOW_SIZE.0 / 2.0) - 50.0, 0.0, 0.0)),
-            GlobalTransform::default(),
-        ))
-        .insert(Paddle)
-        .insert(CollisionShape::Cuboid {
-            half_extends: Vec3::new(PADDLE_SIZE.0 / 2.0, PADDLE_SIZE.1 / 2.0, 0.0),
-            border_radius: None,
-        })
-        // TODO: Figure out how to make the paddles not be pushed by the ball.
-        .insert(RigidBody::Dynamic)
-        .insert(RotationConstraints::lock())
-        .insert(Velocity::default())
-        .id();
+    let paddle_bundle = PaddleBundle::new(Vec3::new((WINDOW_SIZE.0 / 2.0) - 50.0, 0.0, 0.0));
+    let right_paddle = commands.spawn_bundle(paddle_bundle).id();
 
     commands.insert_resource(GameState {
         left_paddle,
@@ -185,63 +201,82 @@ fn spawn(mut commands: Commands) {
     });
 }
 
-fn ball_bounce(
+fn ball_wall_bounce(
     mut events: EventReader<CollisionEvent>,
     mut ball_q: Query<&mut Velocity, With<Ball>>,
-    barrier_q: Query<(), Or<(With<Wall>, With<Paddle>)>>,
+    wall_q: Query<(), With<Wall>>,
 ) {
     for event in events.iter() {
         match event {
             CollisionEvent::Started(data1, data2) => {
-                // eprintln!("CollisionStart({:?}, {:?})", data1.rigid_body_entity(), data2.rigid_body_entity());
-                let mut try_bounce = |entity1, entity2, normals: &[Vec2]| {
-                    if let (Ok(mut ball_velocity), Ok(_wall)) = (ball_q.get_mut(entity1), barrier_q.get(entity2)) {
-                        eprintln!("Bounce! Normals: {:?}", normals);
-                        if let Some(normal) = normals.get(0) {
-                            // Bounce back in the direction of the first normal found.
-                            if normal.x != 0.0 {
-                                ball_velocity.linear.x *= -1.0;
-                            } else if normal.y != 0.0 {
-                                ball_velocity.linear.y *= -1.0;
-                            }
-                        }
+                let mut try_bounce = |entity1, entity2| {
+                    if let (Ok(mut ball_velocity), Ok(_wall)) = (ball_q.get_mut(entity1), wall_q.get(entity2)) {
+                        // The ball hit a wall, so simply reverse the y velocity.
+                        ball_velocity.linear.y *= -1.0;
                     }
                 };
 
                 let entity1 = data1.rigid_body_entity();
                 let entity2 = data2.rigid_body_entity();
 
-                try_bounce(entity1, entity2, data1.normals());
-                try_bounce(entity2, entity1, data2.normals());
+                try_bounce(entity1, entity2);
+                try_bounce(entity2, entity1);
             }
-            CollisionEvent::Stopped(_data1, _data2) => {
-                // eprintln!("CollisionStop({:?}, {:?})", data1.rigid_body_entity(), data2.rigid_body_entity());
+            _ => {}
+        }
+    }
+}
+
+fn ball_paddle_bounce(
+    mut events: EventReader<CollisionEvent>,
+    mut ball_q: Query<(&Transform, &mut Velocity), With<Ball>>,
+    paddle_q: Query<&Transform, With<Paddle>>,
+    game_state: Res<GameState>,
+) {
+    use bevy::math::Mat2;
+
+    for event in events.iter() {
+        match event {
+            CollisionEvent::Started(data1, data2) => {
+                let mut try_bounce = |entity1, entity2| {
+                    if let (Ok((ball_transform, mut ball_velocity)), Ok(paddle_transform)) = (ball_q.get_mut(entity1), paddle_q.get(entity2)) {
+                        let multiplier = if entity2 == game_state.left_paddle { 1.0 } else { -1.0 };
+
+                        // The ball hit a paddle. Figure out what new angle to come back at based where they collided.
+                        let distance_from_center = ball_transform.translation.y - paddle_transform.translation.y;
+                        let ratio_from_center = (distance_from_center / (PADDLE_SIZE.1 / 2.0)).clamp(-1.0, 1.0);
+                        let bounce_angle = MAX_BOUNCE_ANGLE * ratio_from_center * multiplier;
+                        let new_direction = Vec2::X * multiplier;
+                        let new_direction = Mat2::from_angle(bounce_angle.to_radians()).mul_vec2(new_direction);
+                        ball_velocity.linear = ball_velocity.linear.length() * new_direction.extend(0.0);
+                    }
+                };
+
+                let entity1 = data1.rigid_body_entity();
+                let entity2 = data2.rigid_body_entity();
+
+                try_bounce(entity1, entity2);
+                try_bounce(entity2, entity1);
             }
+            _ => {}
         }
     }
 }
 
 fn check_scored(
-    mut events: EventReader<CollisionEvent>,
-    mut ball_q: Query<(&mut GlobalTransform, &mut Velocity), With<Ball>>,
-    mut game_state: ResMut<GameState>,
+    mut collisions: EventReader<CollisionEvent>,
+    mut player_scored: EventWriter<PlayerScoredEvent>,
+    ball_q: Query<(), With<Ball>>,
+    game_state: Res<GameState>,
 ) {
-    for event in events.iter() {
+    for event in collisions.iter() {
         match event {
             CollisionEvent::Started(data1, data2) => {
                 let mut check_scored_internal = |entity1, entity2| {
-                    if let (Ok((mut ball_transform, mut ball_velocity)), true) = (ball_q.get_mut(entity1), entity2 == game_state.left_goal) {
-                        game_state.right_score += 1;
-                        println!("Right Scored! {} - {}", game_state.left_score, game_state.right_score);
-
-                        ball_transform.translation = Vec3::ZERO;
-                        ball_velocity.linear = Vec3::new(1.0, 2.0, 0.0).normalize() * BALL_SPEED;
-                    } else if let (Ok((mut ball_transform, mut ball_velocity)), true) = (ball_q.get_mut(entity1), entity2 == game_state.right_goal) {
-                        game_state.left_score += 1;
-                        println!("Left Scored! {} - {}", game_state.left_score, game_state.right_score);
-
-                        ball_transform.translation = Vec3::ZERO;
-                        ball_velocity.linear = Vec3::new(1.0, 2.0, 0.0).normalize() * BALL_SPEED;
+                    if let (Ok(()), true) = (ball_q.get(entity1), entity2 == game_state.left_goal) {
+                        player_scored.send(PlayerScoredEvent(PlayerSide::Right));
+                    } else if let (Ok(()), true) = (ball_q.get(entity1), entity2 == game_state.right_goal) {
+                        player_scored.send(PlayerScoredEvent(PlayerSide::Left));
                     }
                 };
 
@@ -256,6 +291,36 @@ fn check_scored(
     }
 }
 
+fn reset_round(
+    mut commands: Commands,
+    mut player_scored: EventReader<PlayerScoredEvent>,
+    mut game_state: ResMut<GameState>,
+    ball_q: Query<Entity, With<Ball>>,
+) {
+    let mut should_reset = false;
+    for event in player_scored.iter() {
+        should_reset = true;
+        match event.0 {
+            PlayerSide::Left => {
+                game_state.left_score += 1;
+                println!("Left Scored! {} - {}", game_state.left_score, game_state.right_score);
+            }
+            PlayerSide::Right => {
+                game_state.right_score += 1;
+                println!("Right Scored! {} - {}", game_state.left_score, game_state.right_score);
+            }
+        }
+    }
+    if should_reset {
+        // TODO: Figure out if we can get teleporting working! Sounds like teleporting won't work for KinematicVelocityBased bodies...
+        // For now, respawn the ball in the center.
+        for ball_entity in ball_q.iter() {
+            commands.entity(ball_entity).despawn();
+            let ball_bundle = BallBundle::new(Vec3::ZERO, Vec3::X * BALL_SPEED);
+            commands.spawn_bundle(ball_bundle);
+        }
+    }
+}
 
 fn camera_control(
     keys: Res<Input<KeyCode>>,
