@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 bevy = "0.6"
-heron = { version = "2.3", features = ["2d", "debug-2d"] }
+heron = { version = "2.4", features = ["2d", "debug-2d"] }
 
 # Enable only a small amount of optimization in debug mode
 [profile.dev]
