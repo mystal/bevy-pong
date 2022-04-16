@@ -4,7 +4,7 @@ use heron::prelude::*;
 
 const WINDOW_SIZE: (f32, f32) = (800.0, 600.0);
 
-const BALL_SPEED: f32 = 200.0;
+const BALL_SPEED: f32 = 300.0;
 const BALL_SIZE: f32 = 40.0;
 const WALL_DEPTH: f32 = 20.0;
 const GOAL_DEPTH: f32 = 40.0;
@@ -60,6 +60,7 @@ struct PaddleBundle {
     rigid_body: RigidBody,
     rotation_constraints: RotationConstraints,
     velocity: Velocity,
+    collisions: Collisions,
     transform: Transform,
     global_transform: GlobalTransform,
 }
@@ -73,10 +74,10 @@ impl PaddleBundle {
         Self {
             paddle: Paddle,
             collision_shape,
-            // TODO: Figure out how to make the paddles not be pushed by the ball.
-            rigid_body: RigidBody::Dynamic,
+            rigid_body: RigidBody::KinematicVelocityBased,
             rotation_constraints: RotationConstraints::lock(),
             velocity: Velocity::default(),
+            collisions: Collisions::default(),
             transform: Transform::from_translation(translation),
             global_transform: GlobalTransform::default(),
         }
@@ -91,6 +92,8 @@ enum PlayerSide {
 struct PlayerScoredEvent(PlayerSide);
 
 struct GameState {
+    top_wall: Entity,
+    bottom_wall: Entity,
     left_paddle: Entity,
     right_paddle: Entity,
     left_goal: Entity,
@@ -130,7 +133,7 @@ fn spawn(mut commands: Commands) {
     commands.spawn_bundle(ball_bundle);
 
     // Top wall
-    commands
+    let top_wall = commands
         .spawn_bundle((
             Transform::from_translation(Vec3::new(0.0, (WINDOW_SIZE.1 / 2.0) - (WALL_DEPTH / 2.0), 0.0)),
             GlobalTransform::default(),
@@ -140,10 +143,11 @@ fn spawn(mut commands: Commands) {
             half_extends: Vec3::new(WINDOW_SIZE.0 / 2.0, WALL_DEPTH / 2.0, 0.0),
             border_radius: None,
         })
-        .insert(RigidBody::Static);
+        .insert(RigidBody::Static)
+        .id();
 
     // Bottom wall
-    commands
+    let bottom_wall = commands
         .spawn_bundle((
             Transform::from_translation(Vec3::new(0.0, -(WINDOW_SIZE.1 / 2.0) + (WALL_DEPTH / 2.0), 0.0)),
             GlobalTransform::default(),
@@ -153,7 +157,8 @@ fn spawn(mut commands: Commands) {
             half_extends: Vec3::new(WINDOW_SIZE.0 / 2.0, WALL_DEPTH / 2.0, 0.0),
             border_radius: None,
         })
-        .insert(RigidBody::Static);
+        .insert(RigidBody::Static)
+        .id();
 
     // Left goal zone
     let left_goal = commands
@@ -192,6 +197,8 @@ fn spawn(mut commands: Commands) {
     let right_paddle = commands.spawn_bundle(paddle_bundle).id();
 
     commands.insert_resource(GameState {
+        top_wall,
+        bottom_wall,
         left_paddle,
         right_paddle,
         left_goal,
@@ -351,27 +358,33 @@ fn camera_control(
 
 fn paddle_control(
     keys: Res<Input<KeyCode>>,
-    mut paddle_q: Query<&mut Velocity, With<Paddle>>,
+    mut paddle_q: Query<(&mut Velocity, &Collisions), With<Paddle>>,
     game_state: Res<GameState>,
 ) {
-    if let Ok(mut paddle_velocity) = paddle_q.get_mut(game_state.left_paddle) {
+    if let Ok((mut paddle_velocity, collisions)) = paddle_q.get_mut(game_state.left_paddle) {
         paddle_velocity.linear.y = 0.0;
-        if keys.pressed(KeyCode::W) {
+
+        // If pressing up and not colliding with the top wall.
+        if keys.pressed(KeyCode::W) && !collisions.contains(&game_state.top_wall) {
             paddle_velocity.linear.y += PADDLE_SPEED;
         }
 
-        if keys.pressed(KeyCode::S) {
+        // If pressing down and not colliding with the bottom wall.
+        if keys.pressed(KeyCode::S) && !collisions.contains(&game_state.bottom_wall) {
             paddle_velocity.linear.y -= PADDLE_SPEED;
         }
     }
 
-    if let Ok(mut paddle_velocity) = paddle_q.get_mut(game_state.right_paddle) {
+    if let Ok((mut paddle_velocity, collisions)) = paddle_q.get_mut(game_state.right_paddle) {
         paddle_velocity.linear.y = 0.0;
-        if keys.pressed(KeyCode::Up) {
+
+        // If pressing up and not colliding with the top wall.
+        if keys.pressed(KeyCode::Up) && !collisions.contains(&game_state.top_wall) {
             paddle_velocity.linear.y += PADDLE_SPEED;
         }
 
-        if keys.pressed(KeyCode::Down) {
+        // If pressing down and not colliding with the bottom wall.
+        if keys.pressed(KeyCode::Down) && !collisions.contains(&game_state.bottom_wall) {
             paddle_velocity.linear.y -= PADDLE_SPEED;
         }
     }
