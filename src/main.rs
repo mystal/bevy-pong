@@ -6,7 +6,7 @@ const WINDOW_SIZE: (f32, f32) = (800.0, 600.0);
 
 const BALL_SPEED: f32 = 300.0;
 const BALL_SIZE: f32 = 40.0;
-const WALL_DEPTH: f32 = 20.0;
+const WALL_SIZE:(f32, f32) = (WINDOW_SIZE.0, 20.0);
 const GOAL_DEPTH: f32 = 40.0;
 const PADDLE_SIZE: (f32, f32) = (20.0, 100.0);
 const PADDLE_SPEED: f32 = 300.0;
@@ -18,34 +18,77 @@ struct Ball;
 #[derive(Bundle)]
 struct BallBundle {
     ball: Ball,
+    #[bundle]
+    sprite_bundle: SpriteBundle,
     collision_shape: CollisionShape,
     rigid_body: RigidBody,
     rotation_constraints: RotationConstraints,
     velocity: Velocity,
-    transform: Transform,
-    global_transform: GlobalTransform,
 }
 
 impl BallBundle {
     fn new(translation: Vec3, velocity: Vec3) -> Self {
+        let sprite_bundle = SpriteBundle {
+            sprite: Sprite {
+                color: Color::WHITE,
+                custom_size: Some(Vec2::new(BALL_SIZE, BALL_SIZE)),
+                ..default()
+            },
+            transform: Transform::from_translation(translation),
+            ..default()
+        };
         let collision_shape = CollisionShape::Cuboid {
             half_extends: Vec3::new(BALL_SIZE / 2.0, BALL_SIZE / 2.0, 0.0),
             border_radius: None,
         };
         Self {
             ball: Ball,
+            sprite_bundle,
             collision_shape,
             rigid_body: RigidBody::KinematicVelocityBased,
             rotation_constraints: RotationConstraints::lock(),
             velocity: Velocity::from_linear(velocity),
-            transform: Transform::from_translation(translation),
-            global_transform: GlobalTransform::default(),
         }
     }
 }
 
 #[derive(Component)]
 struct Wall;
+
+#[derive(Bundle)]
+struct WallBundle {
+    wall: Wall,
+    #[bundle]
+    sprite_bundle: SpriteBundle,
+    collision_shape: CollisionShape,
+    rigid_body: RigidBody,
+    rotation_constraints: RotationConstraints,
+}
+
+impl WallBundle {
+    fn new(translation: Vec3) -> Self {
+        let sprite_bundle = SpriteBundle {
+            sprite: Sprite {
+                color: Color::WHITE,
+                custom_size: Some(Vec2::new(WALL_SIZE.0, WALL_SIZE.1)),
+                ..default()
+            },
+            transform: Transform::from_translation(translation),
+            ..default()
+        };
+        let collision_shape = CollisionShape::Cuboid {
+            half_extends: Vec3::new(WALL_SIZE.0 / 2.0, WALL_SIZE.1 / 2.0, 0.0),
+            border_radius: None,
+        };
+        Self {
+            wall: Wall,
+            sprite_bundle,
+            collision_shape,
+            rigid_body: RigidBody::Static,
+            rotation_constraints: RotationConstraints::lock(),
+        }
+    }
+}
 
 #[derive(Component)]
 struct Goal;
@@ -56,30 +99,38 @@ struct Paddle;
 #[derive(Bundle)]
 struct PaddleBundle {
     paddle: Paddle,
+    #[bundle]
+    sprite_bundle: SpriteBundle,
     collision_shape: CollisionShape,
     rigid_body: RigidBody,
     rotation_constraints: RotationConstraints,
     velocity: Velocity,
     collisions: Collisions,
-    transform: Transform,
-    global_transform: GlobalTransform,
 }
 
 impl PaddleBundle {
     fn new(translation: Vec3) -> Self {
+        let sprite_bundle = SpriteBundle {
+            sprite: Sprite {
+                color: Color::WHITE,
+                custom_size: Some(Vec2::new(PADDLE_SIZE.0, PADDLE_SIZE.1)),
+                ..default()
+            },
+            transform: Transform::from_translation(translation),
+            ..default()
+        };
         let collision_shape = CollisionShape::Cuboid {
             half_extends: Vec3::new(PADDLE_SIZE.0 / 2.0, PADDLE_SIZE.1 / 2.0, 0.0),
             border_radius: None,
         };
         Self {
             paddle: Paddle,
+            sprite_bundle,
             collision_shape,
             rigid_body: RigidBody::KinematicVelocityBased,
             rotation_constraints: RotationConstraints::lock(),
             velocity: Velocity::default(),
             collisions: Collisions::default(),
-            transform: Transform::from_translation(translation),
-            global_transform: GlobalTransform::default(),
         }
     }
 }
@@ -110,6 +161,7 @@ fn main() {
             height: WINDOW_SIZE.1,
             ..Default::default()
         })
+        .insert_resource(ClearColor(Color::BLACK))
         .add_plugins(DefaultPlugins)
         .add_plugin(PhysicsPlugin::default())
         .add_event::<PlayerScoredEvent>()
@@ -133,31 +185,15 @@ fn spawn(mut commands: Commands) {
     commands.spawn_bundle(ball_bundle);
 
     // Top wall
+    let wall_bundle = WallBundle::new(Vec3::new(0.0, (WINDOW_SIZE.1 / 2.0) - (WALL_SIZE.1 / 2.0), 0.0));
     let top_wall = commands
-        .spawn_bundle((
-            Transform::from_translation(Vec3::new(0.0, (WINDOW_SIZE.1 / 2.0) - (WALL_DEPTH / 2.0), 0.0)),
-            GlobalTransform::default(),
-        ))
-        .insert(Wall)
-        .insert(CollisionShape::Cuboid {
-            half_extends: Vec3::new(WINDOW_SIZE.0 / 2.0, WALL_DEPTH / 2.0, 0.0),
-            border_radius: None,
-        })
-        .insert(RigidBody::Static)
+        .spawn_bundle(wall_bundle)
         .id();
 
     // Bottom wall
+    let wall_bundle = WallBundle::new(Vec3::new(0.0, -(WINDOW_SIZE.1 / 2.0) + (WALL_SIZE.1 / 2.0), 0.0));
     let bottom_wall = commands
-        .spawn_bundle((
-            Transform::from_translation(Vec3::new(0.0, -(WINDOW_SIZE.1 / 2.0) + (WALL_DEPTH / 2.0), 0.0)),
-            GlobalTransform::default(),
-        ))
-        .insert(Wall)
-        .insert(CollisionShape::Cuboid {
-            half_extends: Vec3::new(WINDOW_SIZE.0 / 2.0, WALL_DEPTH / 2.0, 0.0),
-            border_radius: None,
-        })
-        .insert(RigidBody::Static)
+        .spawn_bundle(wall_bundle)
         .id();
 
     // Left goal zone
