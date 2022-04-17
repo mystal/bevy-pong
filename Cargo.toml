@@ -2,12 +2,13 @@
 name = "bevy-pong"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.60"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bevy = "0.6"
-heron = { version = "2.4", features = ["2d", "debug-2d"] }
+bevy = "0.7"
+heron = { version = "3", features = ["2d", "debug-2d"] }
 
 # Enable only a small amount of optimization in debug mode
 [profile.dev]
