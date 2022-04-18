@@ -191,7 +191,7 @@ fn main() {
             title: "Pong!".into(),
             width: WINDOW_SIZE.0,
             height: WINDOW_SIZE.1,
-            ..Default::default()
+            ..default()
         })
         .insert_resource(ClearColor(Color::BLACK))
         .add_plugins(DefaultPlugins)
@@ -203,8 +203,8 @@ fn main() {
         .add_system(paddle_control)
         .add_system(ball_wall_bounce)
         .add_system(ball_paddle_bounce)
-        .add_system(check_scored.label("score_check"))
-        .add_system(reset_round.after("score_check"))
+        .add_system(check_scored)
+        .add_system(reset_round.after(check_scored))
         .run();
 }
 
