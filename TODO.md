@@ -5,6 +5,9 @@
 * [ ] Show score.
 * [ ] Put a web build up on itch.io
   * [x] Figure out how to make web builds.
+  * [ ] Figure out how to fix up paths from absolute to relative in trunk's generated index.html.
+  * [x] Remove margin around canvas in itch iframe.
+  * [ ] Optimize size of wasm file.
 * [ ] Clean up collision checks to prevent paddles from penetrating walls and ball.
 * [ ] Expose tunables via a egui.
 * [ ] Try out [bevy_hanabi](https://lib.rs/bevy_hanabi/) for particle effects!
