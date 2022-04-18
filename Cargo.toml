@@ -10,8 +10,12 @@ rust-version = "1.60"
 phys-viz = ["heron/debug-2d"]
 
 [dependencies]
+# Base engine dependency.
 bevy = "0.7"
+# 2D physics. Mostly used for collision detection.
 heron = { version = "3", features = ["2d"] }
+# For quick, simple random number generation.
+fastrand = "1"
 
 # Enable only a small amount of optimization in debug mode
 [profile.dev]

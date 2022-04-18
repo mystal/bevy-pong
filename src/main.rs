@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 use bevy::input::mouse::MouseMotion;
+use bevy::math::Mat2;
 use heron::prelude::*;
 
 const WINDOW_SIZE: (f32, f32) = (800.0, 600.0);
@@ -49,6 +50,13 @@ impl BallBundle {
             rotation_constraints: RotationConstraints::lock(),
             velocity: Velocity::from_linear(velocity),
         }
+    }
+
+    fn from_side(side: PlayerSide) -> Self {
+        let angle = (fastrand::f32() * MAX_BOUNCE_ANGLE * 2.0) - MAX_BOUNCE_ANGLE;
+        let direction = Vec2::X * side.multiplier() as f32;
+        let direction = Mat2::from_angle(angle.to_radians()).mul_vec2(direction);
+        Self::new(Vec3::ZERO, direction.extend(0.0) * BALL_SPEED)
     }
 }
 
@@ -135,9 +143,32 @@ impl PaddleBundle {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 enum PlayerSide {
     Left,
     Right,
+}
+
+const SIDES: &[PlayerSide] = &[PlayerSide::Left, PlayerSide::Right];
+
+impl PlayerSide {
+    fn random() -> Self {
+        SIDES[fastrand::usize(..SIDES.len())]
+    }
+
+    fn next(&self) -> Self {
+        match self {
+            Self::Left => Self::Right,
+            Self::Right => Self::Left,
+        }
+    }
+
+    fn multiplier(&self) -> i8 {
+        match self {
+            Self::Left => -1,
+            Self::Right => 1,
+        }
+    }
 }
 
 struct PlayerScoredEvent(PlayerSide);
@@ -149,6 +180,7 @@ struct GameState {
     right_paddle: Entity,
     left_goal: Entity,
     right_goal: Entity,
+    next_serve: PlayerSide,
     left_score: u8,
     right_score: u8,
 }
@@ -179,9 +211,11 @@ fn main() {
 fn spawn(mut commands: Commands) {
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
 
+    let initial_serve = PlayerSide::random();
+
     // Bouncy ball
     // let ball_bundle = BallBundle::new(Vec3::ZERO, Vec3::new(-1.0, 2.0, 0.0).normalize() * BALL_SPEED);
-    let ball_bundle = BallBundle::new(Vec3::ZERO, Vec3::X * BALL_SPEED);
+    let ball_bundle = BallBundle::from_side(initial_serve);
     commands.spawn_bundle(ball_bundle);
 
     // Top wall
@@ -239,6 +273,7 @@ fn spawn(mut commands: Commands) {
         right_paddle,
         left_goal,
         right_goal,
+        next_serve: initial_serve.next(),
         left_score: 0,
         right_score: 0,
     });
@@ -276,8 +311,6 @@ fn ball_paddle_bounce(
     paddle_q: Query<&Transform, With<Paddle>>,
     game_state: Res<GameState>,
 ) {
-    use bevy::math::Mat2;
-
     for event in events.iter() {
         match event {
             CollisionEvent::Started(data1, data2) => {
@@ -285,6 +318,7 @@ fn ball_paddle_bounce(
                     if let (Ok((ball_transform, mut ball_velocity)), Ok(paddle_transform)) = (ball_q.get_mut(entity1), paddle_q.get(entity2)) {
                         let multiplier = if entity2 == game_state.left_paddle { 1.0 } else { -1.0 };
 
+                        // TODO: If the ball hit the top or bottom of a paddle, reflect the Y velocity.
                         // The ball hit a paddle. Figure out what new angle to come back at based where they collided.
                         let distance_from_center = ball_transform.translation.y - paddle_transform.translation.y;
                         let ratio_from_center = (distance_from_center / (PADDLE_SIZE.1 / 2.0)).clamp(-1.0, 1.0);
@@ -359,8 +393,9 @@ fn reset_round(
         // For now, respawn the ball in the center.
         for ball_entity in ball_q.iter() {
             commands.entity(ball_entity).despawn();
-            let ball_bundle = BallBundle::new(Vec3::ZERO, Vec3::X * BALL_SPEED);
+            let ball_bundle = BallBundle::from_side(game_state.next_serve);
             commands.spawn_bundle(ball_bundle);
+            game_state.next_serve = game_state.next_serve.next();
         }
     }
 }
