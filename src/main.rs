@@ -199,8 +199,8 @@ fn main() {
     #[cfg(target_arch = "wasm32")]
     console_error_panic_hook::set_once();
 
-    App::new()
-        .insert_resource(WindowDescriptor {
+    let mut app = App::new();
+    app.insert_resource(WindowDescriptor {
             title: "Pong!".into(),
             width: WINDOW_SIZE.0,
             height: WINDOW_SIZE.1,
@@ -213,14 +213,17 @@ fn main() {
         .add_event::<PlayerScoredEvent>()
         .add_startup_system(load_assets)
         .add_startup_system(setup_game.after(load_assets))
-        .add_system(bevy::input::system::exit_on_esc_system)
         .add_system(camera_control)
         .add_system(paddle_control)
         .add_system(ball_wall_bounce)
         .add_system(ball_paddle_bounce)
         .add_system(check_scored)
-        .add_system(reset_round.after(check_scored))
-        .run();
+        .add_system(reset_round.after(check_scored));
+
+    #[cfg(not(target_arch = "wasm32"))]
+    app.add_system(bevy::input::system::exit_on_esc_system);
+
+    app.run();
 }
 
 fn load_assets(
