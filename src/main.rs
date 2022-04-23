@@ -114,8 +114,6 @@ struct PaddleBundle {
     collision_shape: CollisionShape,
     rigid_body: RigidBody,
     rotation_constraints: RotationConstraints,
-    velocity: Velocity,
-    collisions: Collisions,
 }
 
 impl PaddleBundle {
@@ -137,10 +135,8 @@ impl PaddleBundle {
             paddle: Paddle,
             sprite_bundle,
             collision_shape,
-            rigid_body: RigidBody::KinematicVelocityBased,
+            rigid_body: RigidBody::KinematicPositionBased,
             rotation_constraints: RotationConstraints::lock(),
-            velocity: Velocity::default(),
-            collisions: Collisions::default(),
         }
     }
 }
@@ -181,8 +177,6 @@ struct Assets {
 }
 
 struct GameState {
-    top_wall: Entity,
-    bottom_wall: Entity,
     left_paddle: Entity,
     right_paddle: Entity,
     left_goal: Entity,
@@ -245,13 +239,13 @@ fn setup_game(
 
     // Top wall
     let wall_bundle = WallBundle::new(Vec3::new(0.0, (WINDOW_SIZE.1 / 2.0) - (WALL_SIZE.1 / 2.0), 0.0));
-    let top_wall = commands
+    let _top_wall = commands
         .spawn_bundle(wall_bundle)
         .id();
 
     // Bottom wall
     let wall_bundle = WallBundle::new(Vec3::new(0.0, -(WINDOW_SIZE.1 / 2.0) + (WALL_SIZE.1 / 2.0), 0.0));
-    let bottom_wall = commands
+    let _bottom_wall = commands
         .spawn_bundle(wall_bundle)
         .id();
 
@@ -296,7 +290,6 @@ fn setup_game(
         font: assets.font.clone(),
         font_size: 60.0,
         color: Color::WHITE,
-        ..default()
     };
     let alignment = TextAlignment {
         horizontal: HorizontalAlign::Center,
@@ -318,8 +311,6 @@ fn setup_game(
         .id();
 
     commands.insert_resource(GameState {
-        top_wall,
-        bottom_wall,
         left_paddle,
         right_paddle,
         left_goal,
@@ -338,22 +329,19 @@ fn ball_wall_bounce(
     wall_q: Query<(), With<Wall>>,
 ) {
     for event in events.iter() {
-        match event {
-            CollisionEvent::Started(data1, data2) => {
-                let mut try_bounce = |entity1, entity2| {
-                    if let (Ok(mut ball_velocity), Ok(_wall)) = (ball_q.get_mut(entity1), wall_q.get(entity2)) {
-                        // The ball hit a wall, so simply reverse the y velocity.
-                        ball_velocity.linear.y *= -1.0;
-                    }
-                };
+        if let CollisionEvent::Started(data1, data2) = event {
+            let mut try_bounce = |entity1, entity2| {
+                if let (Ok(mut ball_velocity), Ok(_wall)) = (ball_q.get_mut(entity1), wall_q.get(entity2)) {
+                    // The ball hit a wall, so simply reverse the y velocity.
+                    ball_velocity.linear.y *= -1.0;
+                }
+            };
 
-                let entity1 = data1.rigid_body_entity();
-                let entity2 = data2.rigid_body_entity();
+            let entity1 = data1.rigid_body_entity();
+            let entity2 = data2.rigid_body_entity();
 
-                try_bounce(entity1, entity2);
-                try_bounce(entity2, entity1);
-            }
-            _ => {}
+            try_bounce(entity1, entity2);
+            try_bounce(entity2, entity1);
         }
     }
 }
@@ -365,30 +353,27 @@ fn ball_paddle_bounce(
     game_state: Res<GameState>,
 ) {
     for event in events.iter() {
-        match event {
-            CollisionEvent::Started(data1, data2) => {
-                let mut try_bounce = |entity1, entity2| {
-                    if let (Ok((ball_transform, mut ball_velocity)), Ok(paddle_transform)) = (ball_q.get_mut(entity1), paddle_q.get(entity2)) {
-                        let multiplier = if entity2 == game_state.left_paddle { 1.0 } else { -1.0 };
+        if let CollisionEvent::Started(data1, data2) = event {
+            let mut try_bounce = |entity1, entity2| {
+                if let (Ok((ball_transform, mut ball_velocity)), Ok(paddle_transform)) = (ball_q.get_mut(entity1), paddle_q.get(entity2)) {
+                    let multiplier = if entity2 == game_state.left_paddle { 1.0 } else { -1.0 };
 
-                        // TODO: If the ball hit the top or bottom of a paddle, reflect the Y velocity.
-                        // The ball hit a paddle. Figure out what new angle to come back at based where they collided.
-                        let distance_from_center = ball_transform.translation.y - paddle_transform.translation.y;
-                        let ratio_from_center = (distance_from_center / (PADDLE_SIZE.1 / 2.0)).clamp(-1.0, 1.0);
-                        let bounce_angle = MAX_BOUNCE_ANGLE * ratio_from_center * multiplier;
-                        let new_direction = Vec2::X * multiplier;
-                        let new_direction = Mat2::from_angle(bounce_angle.to_radians()).mul_vec2(new_direction);
-                        ball_velocity.linear = ball_velocity.linear.length() * new_direction.extend(0.0);
-                    }
-                };
+                    // TODO: If the ball hit the top or bottom of a paddle, reflect the Y velocity.
+                    // The ball hit a paddle. Figure out what new angle to come back at based where they collided.
+                    let distance_from_center = ball_transform.translation.y - paddle_transform.translation.y;
+                    let ratio_from_center = (distance_from_center / (PADDLE_SIZE.1 / 2.0)).clamp(-1.0, 1.0);
+                    let bounce_angle = MAX_BOUNCE_ANGLE * ratio_from_center * multiplier;
+                    let new_direction = Vec2::X * multiplier;
+                    let new_direction = Mat2::from_angle(bounce_angle.to_radians()).mul_vec2(new_direction);
+                    ball_velocity.linear = ball_velocity.linear.length() * new_direction.extend(0.0);
+                }
+            };
 
-                let entity1 = data1.rigid_body_entity();
-                let entity2 = data2.rigid_body_entity();
+            let entity1 = data1.rigid_body_entity();
+            let entity2 = data2.rigid_body_entity();
 
-                try_bounce(entity1, entity2);
-                try_bounce(entity2, entity1);
-            }
-            _ => {}
+            try_bounce(entity1, entity2);
+            try_bounce(entity2, entity1);
         }
     }
 }
@@ -400,23 +385,20 @@ fn check_scored(
     game_state: Res<GameState>,
 ) {
     for event in collisions.iter() {
-        match event {
-            CollisionEvent::Started(data1, data2) => {
-                let mut check_scored_internal = |entity1, entity2| {
-                    if let (Ok(()), true) = (ball_q.get(entity1), entity2 == game_state.left_goal) {
-                        player_scored.send(PlayerScoredEvent(PlayerSide::Right));
-                    } else if let (Ok(()), true) = (ball_q.get(entity1), entity2 == game_state.right_goal) {
-                        player_scored.send(PlayerScoredEvent(PlayerSide::Left));
-                    }
-                };
+        if let CollisionEvent::Started(data1, data2) = event {
+            let mut check_scored_internal = |entity1, entity2| {
+                if let (Ok(()), true) = (ball_q.get(entity1), entity2 == game_state.left_goal) {
+                    player_scored.send(PlayerScoredEvent(PlayerSide::Right));
+                } else if let (Ok(()), true) = (ball_q.get(entity1), entity2 == game_state.right_goal) {
+                    player_scored.send(PlayerScoredEvent(PlayerSide::Left));
+                }
+            };
 
-                let entity1 = data1.rigid_body_entity();
-                let entity2 = data2.rigid_body_entity();
+            let entity1 = data1.rigid_body_entity();
+            let entity2 = data2.rigid_body_entity();
 
-                check_scored_internal(entity1, entity2);
-                check_scored_internal(entity2, entity1);
-            }
-            _ => {}
+            check_scored_internal(entity1, entity2);
+            check_scored_internal(entity2, entity1);
         }
     }
 }
@@ -489,34 +471,29 @@ fn camera_control(
 
 fn paddle_control(
     keys: Res<Input<KeyCode>>,
-    mut paddle_q: Query<(&mut Velocity, &Collisions), With<Paddle>>,
+    mut paddle_q: Query<&mut Transform, With<Paddle>>,
     game_state: Res<GameState>,
+    time: Res<Time>,
 ) {
-    if let Ok((mut paddle_velocity, collisions)) = paddle_q.get_mut(game_state.left_paddle) {
-        paddle_velocity.linear.y = 0.0;
+    const PADDLE_LIMIT: f32 = (WINDOW_SIZE.1 / 2.0) - WALL_SIZE.1 - (PADDLE_SIZE.1 / 2.0);
 
-        // If pressing up and not colliding with the top wall.
-        if keys.pressed(KeyCode::W) && !collisions.contains(&game_state.top_wall) {
-            paddle_velocity.linear.y += PADDLE_SPEED;
+    if let Ok(mut transform) = paddle_q.get_mut(game_state.left_paddle) {
+        if keys.pressed(KeyCode::W) {
+            transform.translation.y += PADDLE_SPEED * time.delta_seconds();
         }
-
-        // If pressing down and not colliding with the bottom wall.
-        if keys.pressed(KeyCode::S) && !collisions.contains(&game_state.bottom_wall) {
-            paddle_velocity.linear.y -= PADDLE_SPEED;
+        if keys.pressed(KeyCode::S) {
+            transform.translation.y -= PADDLE_SPEED * time.delta_seconds();
         }
+        transform.translation.y = transform.translation.y.clamp(-PADDLE_LIMIT, PADDLE_LIMIT);
     }
 
-    if let Ok((mut paddle_velocity, collisions)) = paddle_q.get_mut(game_state.right_paddle) {
-        paddle_velocity.linear.y = 0.0;
-
-        // If pressing up and not colliding with the top wall.
-        if keys.pressed(KeyCode::Up) && !collisions.contains(&game_state.top_wall) {
-            paddle_velocity.linear.y += PADDLE_SPEED;
+    if let Ok(mut transform) = paddle_q.get_mut(game_state.right_paddle) {
+        if keys.pressed(KeyCode::Up) {
+            transform.translation.y += PADDLE_SPEED * time.delta_seconds();
         }
-
-        // If pressing down and not colliding with the bottom wall.
-        if keys.pressed(KeyCode::Down) && !collisions.contains(&game_state.bottom_wall) {
-            paddle_velocity.linear.y -= PADDLE_SPEED;
+        if keys.pressed(KeyCode::Down) {
+            transform.translation.y -= PADDLE_SPEED * time.delta_seconds();
         }
+        transform.translation.y = transform.translation.y.clamp(-PADDLE_LIMIT, PADDLE_LIMIT);
     }
 }

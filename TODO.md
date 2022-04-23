@@ -10,7 +10,9 @@
   * [ ] Figure out how to fix up paths from absolute to relative in trunk's generated index.html.
   * [x] Remove margin around canvas in itch iframe.
   * [x] Optimize size of wasm file.
-* [ ] Clean up collision checks to prevent paddles from penetrating walls and ball.
+* Clean up collision checks to prevent paddles from penetrating
+  * [x] Walls
+  * [ ] Ball
 * [ ] Expose tunables via a egui.
 * [ ] Preload assets before starting the game. (Loading screen?)
 * [ ] Try out [bevy_hanabi](https://lib.rs/bevy_hanabi/) for particle effects!
