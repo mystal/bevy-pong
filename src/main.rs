@@ -175,6 +175,11 @@ impl PlayerSide {
 
 struct PlayerScoredEvent(PlayerSide);
 
+#[derive(Default)]
+struct Assets {
+    font: Handle<Font>,
+}
+
 struct GameState {
     top_wall: Entity,
     bottom_wall: Entity,
@@ -185,6 +190,8 @@ struct GameState {
     next_serve: PlayerSide,
     left_score: u8,
     right_score: u8,
+    left_score_text: Entity,
+    right_score_text: Entity,
 }
 
 fn main() {
@@ -200,10 +207,12 @@ fn main() {
             ..default()
         })
         .insert_resource(ClearColor(Color::BLACK))
+        .init_resource::<Assets>()
         .add_plugins(DefaultPlugins)
         .add_plugin(PhysicsPlugin::default())
         .add_event::<PlayerScoredEvent>()
-        .add_startup_system(spawn)
+        .add_startup_system(load_assets)
+        .add_startup_system(setup_game.after(load_assets))
         .add_system(bevy::input::system::exit_on_esc_system)
         .add_system(camera_control)
         .add_system(paddle_control)
@@ -214,7 +223,17 @@ fn main() {
         .run();
 }
 
-fn spawn(mut commands: Commands) {
+fn load_assets(
+    server: Res<AssetServer>,
+    mut assets: ResMut<Assets>,
+) {
+    assets.font = server.load("SourceSansPro-Regular.ttf");
+}
+
+fn setup_game(
+    mut commands: Commands,
+    assets: Res<Assets>,
+) {
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
 
     let initial_serve = PlayerSide::random();
@@ -272,6 +291,32 @@ fn spawn(mut commands: Commands) {
     let paddle_bundle = PaddleBundle::new(Vec3::new((WINDOW_SIZE.0 / 2.0) - 50.0, 0.0, 0.0));
     let right_paddle = commands.spawn_bundle(paddle_bundle).id();
 
+    // Score text
+    let style = TextStyle {
+        font: assets.font.clone(),
+        font_size: 60.0,
+        color: Color::WHITE,
+        ..default()
+    };
+    let alignment = TextAlignment {
+        horizontal: HorizontalAlign::Center,
+        ..default()
+    };
+    let left_score_text = commands
+        .spawn_bundle(Text2dBundle {
+            text: Text::with_section("0", style.clone(), alignment),
+            transform: Transform::from_translation(Vec3::new(-200.0, 200.0, 0.0)),
+            ..default()
+        })
+        .id();
+    let right_score_text = commands
+        .spawn_bundle(Text2dBundle {
+            text: Text::with_section("0", style.clone(), alignment),
+            transform: Transform::from_translation(Vec3::new(200.0, 200.0, 0.0)),
+            ..default()
+        })
+        .id();
+
     commands.insert_resource(GameState {
         top_wall,
         bottom_wall,
@@ -282,6 +327,8 @@ fn spawn(mut commands: Commands) {
         next_serve: initial_serve.next(),
         left_score: 0,
         right_score: 0,
+        left_score_text,
+        right_score_text,
     });
 }
 
@@ -379,6 +426,7 @@ fn reset_round(
     mut player_scored: EventReader<PlayerScoredEvent>,
     mut game_state: ResMut<GameState>,
     ball_q: Query<Entity, With<Ball>>,
+    mut score_text_q: Query<&mut Text>,
 ) {
     let mut should_reset = false;
     for event in player_scored.iter() {
@@ -387,10 +435,16 @@ fn reset_round(
             PlayerSide::Left => {
                 game_state.left_score += 1;
                 println!("Left Scored! {} - {}", game_state.left_score, game_state.right_score);
+                if let Ok(mut text) = score_text_q.get_mut(game_state.left_score_text) {
+                    text.sections[0].value = game_state.left_score.to_string();
+                }
             }
             PlayerSide::Right => {
                 game_state.right_score += 1;
                 println!("Right Scored! {} - {}", game_state.left_score, game_state.right_score);
+                if let Ok(mut text) = score_text_q.get_mut(game_state.right_score_text) {
+                    text.sections[0].value = game_state.right_score.to_string();
+                }
             }
         }
     }
