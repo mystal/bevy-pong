@@ -7,11 +7,17 @@ use heron::prelude::*;
 
 const WINDOW_SIZE: (f32, f32) = (800.0, 600.0);
 
-const BALL_SPEED: f32 = 300.0;
-const BALL_SIZE: f32 = 40.0;
+const BALL_SIZE: f32 = 30.0;
+const BALL_START_SPEED: f32 = 400.0;
+const BALL_MAX_SPEED: f32 = 1000.0;
+const BALL_SPEED_INCREMENT: f32 = 20.0;
+
 const WALL_SIZE:(f32, f32) = (WINDOW_SIZE.0, 20.0);
-const GOAL_DEPTH: f32 = 40.0;
+const GOAL_WIDTH: f32 = 40.0;
+const GOAL_DEPTH: f32 = 20.0;
+
 const PADDLE_SIZE: (f32, f32) = (20.0, 100.0);
+const PADDLE_GOAL_SEPARATION: f32 = 10.0;
 const PADDLE_SPEED: f32 = 300.0;
 const MAX_BOUNCE_ANGLE: f32 = 45.0;
 
@@ -58,7 +64,7 @@ impl BallBundle {
         let angle = (fastrand::f32() * MAX_BOUNCE_ANGLE * 2.0) - MAX_BOUNCE_ANGLE;
         let direction = Vec2::X * side.multiplier() as f32;
         let direction = Mat2::from_angle(angle.to_radians()).mul_vec2(direction);
-        Self::new(Vec3::ZERO, direction.extend(0.0) * BALL_SPEED)
+        Self::new(Vec3::ZERO, direction.extend(0.0) * BALL_START_SPEED)
     }
 }
 
@@ -252,12 +258,12 @@ fn setup_game(
     // Left goal zone
     let left_goal = commands
         .spawn_bundle((
-            Transform::from_translation(Vec3::new(-(WINDOW_SIZE.0 / 2.0) - (GOAL_DEPTH / 2.0), 0.0, 0.0)),
+            Transform::from_translation(Vec3::new(-(WINDOW_SIZE.0 / 2.0) - (GOAL_WIDTH / 2.0) - GOAL_DEPTH, 0.0, 0.0)),
             GlobalTransform::default(),
         ))
         .insert(Goal)
         .insert(CollisionShape::Cuboid {
-            half_extends: Vec3::new(GOAL_DEPTH / 2.0, WINDOW_SIZE.1 / 2.0, 0.0),
+            half_extends: Vec3::new(GOAL_WIDTH / 2.0, WINDOW_SIZE.1 / 2.0, 0.0),
             border_radius: None,
         })
         .insert(RigidBody::Sensor)
@@ -266,23 +272,23 @@ fn setup_game(
     // Right goal zone
     let right_goal = commands
         .spawn_bundle((
-            Transform::from_translation(Vec3::new((WINDOW_SIZE.0 / 2.0) + (GOAL_DEPTH / 2.0), 0.0, 0.0)),
+            Transform::from_translation(Vec3::new((WINDOW_SIZE.0 / 2.0) + (GOAL_WIDTH / 2.0) + GOAL_DEPTH, 0.0, 0.0)),
             GlobalTransform::default(),
         ))
         .insert(Goal)
         .insert(CollisionShape::Cuboid {
-            half_extends: Vec3::new(GOAL_DEPTH / 2.0, WINDOW_SIZE.1 / 2.0, 0.0),
+            half_extends: Vec3::new(GOAL_WIDTH / 2.0, WINDOW_SIZE.1 / 2.0, 0.0),
             border_radius: None,
         })
         .insert(RigidBody::Sensor)
         .id();
 
     // Left paddle
-    let paddle_bundle = PaddleBundle::new(Vec3::new(-(WINDOW_SIZE.0 / 2.0) + 50.0, 0.0, 0.0));
+    let paddle_bundle = PaddleBundle::new(Vec3::new(-(WINDOW_SIZE.0 / 2.0) + (PADDLE_SIZE.0 / 2.0) + PADDLE_GOAL_SEPARATION, 0.0, 0.0));
     let left_paddle = commands.spawn_bundle(paddle_bundle).id();
 
     // Right paddle
-    let paddle_bundle = PaddleBundle::new(Vec3::new((WINDOW_SIZE.0 / 2.0) - 50.0, 0.0, 0.0));
+    let paddle_bundle = PaddleBundle::new(Vec3::new((WINDOW_SIZE.0 / 2.0) - (PADDLE_SIZE.0 / 2.0) - PADDLE_GOAL_SEPARATION, 0.0, 0.0));
     let right_paddle = commands.spawn_bundle(paddle_bundle).id();
 
     // Score text
@@ -365,7 +371,8 @@ fn ball_paddle_bounce(
                     let bounce_angle = MAX_BOUNCE_ANGLE * ratio_from_center * multiplier;
                     let new_direction = Vec2::X * multiplier;
                     let new_direction = Mat2::from_angle(bounce_angle.to_radians()).mul_vec2(new_direction);
-                    ball_velocity.linear = ball_velocity.linear.length() * new_direction.extend(0.0);
+                    let new_speed = (ball_velocity.linear.length() + BALL_SPEED_INCREMENT).min(BALL_MAX_SPEED);
+                    ball_velocity.linear = new_speed * new_direction.extend(0.0);
                 }
             };
 
@@ -407,12 +414,11 @@ fn reset_round(
     mut commands: Commands,
     mut player_scored: EventReader<PlayerScoredEvent>,
     mut game_state: ResMut<GameState>,
-    ball_q: Query<Entity, With<Ball>>,
+    ball_q: Query<(Entity, &Velocity), With<Ball>>,
     mut score_text_q: Query<&mut Text>,
 ) {
-    let mut should_reset = false;
+    let should_reset = !player_scored.is_empty();
     for event in player_scored.iter() {
-        should_reset = true;
         match event.0 {
             PlayerSide::Left => {
                 game_state.left_score += 1;
@@ -433,7 +439,9 @@ fn reset_round(
     if should_reset {
         // TODO: Figure out if we can get teleporting working! Sounds like teleporting won't work for KinematicVelocityBased bodies...
         // For now, respawn the ball in the center.
-        for ball_entity in ball_q.iter() {
+        for (ball_entity, velocity) in ball_q.iter() {
+            eprintln!("Resetting round. Ball speed was: {:0.0}", velocity.linear.length());
+
             commands.entity(ball_entity).despawn();
             let ball_bundle = BallBundle::from_side(game_state.next_serve);
             commands.spawn_bundle(ball_bundle);
