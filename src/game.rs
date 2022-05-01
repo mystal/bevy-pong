@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use bevy::input::mouse::MouseMotion;
 use bevy::math::Mat2;
+use bevy_kira_audio::Audio;
 use heron::prelude::*;
 use iyes_loopless::prelude::*;
 
@@ -335,6 +336,8 @@ fn ball_paddle_bounce(
     mut ball_q: Query<(&Transform, &mut Velocity), With<Ball>>,
     paddle_q: Query<&Transform, With<Paddle>>,
     game_state: Res<GameState>,
+    assets: Res<Assets>,
+    audio: Res<Audio>,
 ) {
     for event in events.iter() {
         if let CollisionEvent::Started(data1, data2) = event {
@@ -351,6 +354,8 @@ fn ball_paddle_bounce(
                     let new_direction = Mat2::from_angle(bounce_angle.to_radians()).mul_vec2(new_direction);
                     let new_speed = (ball_velocity.linear.length() + BALL_SPEED_INCREMENT).min(BALL_MAX_SPEED);
                     ball_velocity.linear = new_speed * new_direction.extend(0.0);
+
+                    audio.play(assets.bounce.clone());
                 }
             };
 

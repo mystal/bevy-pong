@@ -1,19 +1,26 @@
 # TODO
+## Features
 * Use [iyes_loopless](https://lib.rs/iyes_loopless) for managing game states.
   * [x] Main menu
   * [ ] Settings
   * [ ] Rounds
+* [ ] Expose tunables via a egui.
+* [ ] Add simple sound effects.
+
+### Juice
+* [ ] Camera shake when a paddle hits the ball!
+  * [GDC: Juicing Your Cameras with Math](https://www.youtube.com/watch?v=tu-Qe66AvtY)
+* Try out [bevy_hanabi](https://lib.rs/bevy_hanabi/) for particle effects!
+  * [ ] Trailing particles behind ball. More as it goes faster.
+  * [ ] Sparks when ball hits paddle/wall. More as it goes faster.
+* [ ] Try out [bevy_tweening](https://lib.rs/bevy_tweening/) for something?!
+
+## Bugs
 * [ ] Figure out how to fix up paths from absolute to relative in trunk's generated index.html.
 * Clean up collision checks to prevent paddles from penetrating
   * [x] Walls
   * [ ] Ball
-* [ ] Expose tunables via a egui.
 * [ ] Preload assets before starting the game. (Loading screen?)
-* Try out [bevy_hanabi](https://lib.rs/bevy_hanabi/) for particle effects!
-  * [ ] Trailing particles behind ball. More as it goes faster.
-  * [ ] Sparks when ball hits paddle/wall. More as it goes faster.
-* [ ] Camera shake when a paddle hits the ball!
-* [ ] Try out [bevy_tweening](https://lib.rs/bevy_tweening/) for something?!
 
 # Done
 * [x] Fix the ball resetting after someone scores.
