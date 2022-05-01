@@ -1,6 +1,9 @@
+use std::time::Duration;
+
 use bevy::prelude::*;
 use bevy::app::AppExit;
 use bevy_egui::{egui, EguiContext, EguiPlugin};
+use bevy_tweening::*;
 use iyes_loopless::prelude::*;
 
 use crate::{
@@ -14,6 +17,7 @@ impl Plugin for MenuPlugin {
     fn build(&self, app: &mut App) {
         app
             .add_plugin(EguiPlugin)
+            .add_plugin(TweeningPlugin)
             .add_enter_system(AppState::MainMenu, setup_main_menu)
             .add_exit_system(AppState::MainMenu, despawn_main_menu)
             .add_system(main_menu_ui.run_in_state(AppState::MainMenu));
@@ -34,14 +38,25 @@ pub fn setup_main_menu(
     };
     let alignment = TextAlignment {
         horizontal: HorizontalAlign::Center,
+        vertical: VerticalAlign::Center,
         ..default()
     };
+    let tween = Tween::new(
+        EaseFunction::QuadraticInOut,
+        TweeningType::PingPong,
+        Duration::from_millis(1500),
+        lens::TransformScaleLens {
+            start: Vec3::new(0.9, 0.9, 1.0),
+            end: Vec3::new(1.1, 1.1, 1.0),
+        },
+    );
     commands
         .spawn_bundle(Text2dBundle {
             text: Text::with_section("PONG", style.clone(), alignment),
-            transform: Transform::from_translation(Vec3::new(0.0, 200.0, 0.0)),
+            transform: Transform::from_translation(Vec3::new(0.0, 100.0, 0.0)),
             ..default()
-        });
+        })
+        .insert(Animator::new(tween));
 }
 
 pub fn despawn_main_menu(

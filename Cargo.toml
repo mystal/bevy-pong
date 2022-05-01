@@ -12,6 +12,7 @@ phys-viz = ["heron/debug-2d"]
 [dependencies]
 # For in-game and debug UI.
 bevy_egui = { version = "0.13", default-features = false }
+bevy_tweening = { version = "0.4", default-features = false }
 # For quick, simple random number generation.
 fastrand = "1"
 # 2D physics. Mostly used for collision detection.
