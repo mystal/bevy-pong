@@ -9,7 +9,10 @@
   * [ ] Ball
 * [ ] Expose tunables via a egui.
 * [ ] Preload assets before starting the game. (Loading screen?)
-* [ ] Try out [bevy_hanabi](https://lib.rs/bevy_hanabi/) for particle effects!
+* Try out [bevy_hanabi](https://lib.rs/bevy_hanabi/) for particle effects!
+  * [ ] Trailing particles behind ball. More as it goes faster.
+  * [ ] Sparks when ball hits paddle/wall. More as it goes faster.
+* [ ] Camera shake when a paddle hits the ball!
 * [ ] Try out [bevy_tweening](https://lib.rs/bevy_tweening/) for something?!
 
 # Done
