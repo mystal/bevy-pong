@@ -26,6 +26,7 @@ fn main() {
             title: "Pong!".into(),
             width: WINDOW_SIZE.0,
             height: WINDOW_SIZE.1,
+            resizable: false,
             ..default()
         })
         .insert_resource(ClearColor(Color::BLACK))
