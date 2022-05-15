@@ -32,12 +32,15 @@ impl Plugin for GamePlugin {
             .add_plugin(PhysicsPlugin::default())
             .add_event::<PlayerScoredEvent>()
             .add_enter_system(AppState::InGame, setup_game)
-            .add_system(camera_control.run_in_state(AppState::InGame))
             .add_system(paddle_control.run_in_state(AppState::InGame))
             .add_system(ball_wall_bounce.run_in_state(AppState::InGame))
             .add_system(ball_paddle_bounce.run_in_state(AppState::InGame))
             .add_system(check_scored.run_in_state(AppState::InGame).label("check_scored"))
             .add_system(reset_round.run_in_state(AppState::InGame).after("check_scored"));
+
+        if cfg!(debug_assertions) {
+            app.add_system(camera_control.run_in_state(AppState::InGame));
+        }
     }
 }
 
